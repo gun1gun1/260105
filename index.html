@@ -1,59 +1,207 @@
-<div>Teachable Machine Image Model</div>
-<button type="button" onclick="init()">Start</button>
-<div id="webcam-container"></div>
-<div id="label-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
-<script type="text/javascript">
-    // More API functions here:
-    // https://github.com/googlecreativelab/teachablemachine-community/tree/master/libraries/image
-
-    // the link to your model provided by Teachable Machine export panel
-    const URL = "./my_model/";
-
-    let model, webcam, labelContainer, maxPredictions;
-
-    // Load the image model and setup the webcam
-    async function init() {
-        const modelURL = URL + "model.json";
-        const metadataURL = URL + "metadata.json";
-
-        // load the model and metadata
-        // Refer to tmImage.loadFromFiles() in the API to support files from a file picker
-        // or files from your local hard drive
-        // Note: the pose library adds "tmImage" object to your window (window.tmImage)
-        model = await tmImage.load(modelURL, metadataURL);
-        maxPredictions = model.getTotalClasses();
-
-        // Convenience function to setup a webcam
-        const flip = true; // whether to flip the webcam
-        webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
-        await webcam.setup(); // request access to the webcam
-        await webcam.play();
-        window.requestAnimationFrame(loop);
-
-        // append elements to the DOM
-        document.getElementById("webcam-container").appendChild(webcam.canvas);
-        labelContainer = document.getElementById("label-container");
-        for (let i = 0; i < maxPredictions; i++) { // and class labels
-            labelContainer.appendChild(document.createElement("div"));
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Classifier</title>
+    <style>
+        /* 기본 스타일 설정 (모던 & 미니멀리즘) */
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
         }
-    }
 
-    async function loop() {
-        webcam.update(); // update the webcam frame
-        await predict();
-        window.requestAnimationFrame(loop);
-    }
-
-    // run the webcam image through the image model
-    async function predict() {
-        // predict can take in an image, video or canvas html element
-        const prediction = await model.predict(webcam.canvas);
-        for (let i = 0; i < maxPredictions; i++) {
-            const classPrediction =
-                prediction[i].className + ": " + prediction[i].probability.toFixed(2);
-            labelContainer.childNodes[i].innerHTML = classPrediction;
+        /* 메인 카드 컨테이너 */
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
         }
-    }
-</script>
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #2c3e50;
+        }
+
+        /* 시작 버튼 스타일 */
+        .start-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: 600;
+        }
+
+        .start-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(118, 75, 162, 0.4);
+        }
+
+        .start-btn:active {
+            transform: translateY(0);
+        }
+
+        /* 웹캠 영역 스타일 */
+        #webcam-container {
+            margin-top: 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            line-height: 0; /* 캔버스 하단 여백 제거 */
+        }
+
+        canvas {
+            width: 100% !important;
+            height: auto !important;
+            border-radius: 12px;
+        }
+
+        /* 결과 라벨 및 그래프 스타일 */
+        #label-container {
+            margin-top: 20px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .label-wrapper {
+            margin-bottom: 10px;
+        }
+
+        .label-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .progress-bar-bg {
+            background-color: #eee;
+            border-radius: 10px;
+            height: 10px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            background-color: #667eea;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>AI 이미지 분석기</h1>
+        <button class="start-btn" type="button" onclick="init()">카메라 켜기</button>
+        <div id="webcam-container"></div>
+        <div id="label-container"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    
+    <script type="text/javascript">
+        // ★ 중요: Teachable Machine에서 내보낸 URL을 여기에 입력하세요 ★
+        const URL = "./my_model/"; 
+
+        let model, webcam, labelContainer, maxPredictions;
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            const flip = true; 
+            webcam = new tmImage.Webcam(200, 200, flip); 
+            await webcam.setup(); 
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            // 기존 버튼 숨기기 (UX 개선)
+            document.querySelector('.start-btn').style.display = 'none';
+
+            // 웹캠 DOM 추가
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            
+            // 라벨 컨테이너 생성 (텍스트 + 그래프 바)
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                // 구조: <div> <text>Name - %</text> <bar-bg><bar-fill></bar-bg> </div>
+                const wrapper = document.createElement("div");
+                wrapper.className = "label-wrapper";
+
+                const text = document.createElement("div");
+                text.className = "label-text";
+                text.innerHTML = `<span>Class ${i}</span> <span>0%</span>`; // 초기값
+
+                const barBg = document.createElement("div");
+                barBg.className = "progress-bar-bg";
+                
+                const barFill = document.createElement("div");
+                barFill.className = "progress-bar-fill";
+                
+                barBg.appendChild(barFill);
+                wrapper.appendChild(text);
+                wrapper.appendChild(barBg);
+                labelContainer.appendChild(wrapper);
+            }
+        }
+
+        async function loop() {
+            webcam.update(); 
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            
+            // 라벨 컨테이너의 자식 요소들을 순회하며 업데이트
+            const wrappers = labelContainer.childNodes;
+            
+            for (let i = 0; i < maxPredictions; i++) {
+                const name = prediction[i].className;
+                const probability = prediction[i].probability.toFixed(2);
+                const percentage = (probability * 100).toFixed(0) + "%";
+
+                // 텍스트 업데이트
+                wrappers[i].querySelector(".label-text").innerHTML = 
+                    `<span>${name}</span> <span>${percentage}</span>`;
+                
+                // 그래프 바 너비 및 색상 업데이트 (확률에 따라 투명도 조절 효과)
+                const barFill = wrappers[i].querySelector(".progress-bar-fill");
+                barFill.style.width = percentage;
+                
+                // (선택사항) 가장 높은 확률일 때 색상 강조
+                if(prediction[i].probability > 0.8) {
+                    barFill.style.backgroundColor = "#764ba2"; // 보라색 강조
+                } else {
+                    barFill.style.backgroundColor = "#667eea"; // 기본 파란색
+                }
+            }
+        }
+    </script>
+</body>
+</html>
